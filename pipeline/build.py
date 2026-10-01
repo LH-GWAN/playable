@@ -64,6 +64,7 @@ D1_COLS = [
     ("PBTRNSP_FCLTY_SDIV", "NM"), ("BSTP_SUBWAYST", "NM"), ("WLKG_MVMN", "TIME"), ("WLKG_DSTNC", "VALUE"))]
 KEY_COLS = ["FCLTY_NM", "SIGNGU_CD", "PROGRM_NM", "PROGRM_ESTBL_WKDAY_NM", "PROGRM_ESTBL_TIZN_VALUE", "PROGRM_TRGET_NM"]
 NEXT_WINDOW_DAYS = 31
+SINGLE_SPORT_FACILITY = {"수영장": "swim", "테니스장": "tennis", "골프연습장": "golf", "빙상장": "ice"}
 NEXT_MIN_RECURRENCE = 3
 
 
@@ -232,6 +233,9 @@ def build(raw_dir: Path, ref: date, out_dir: Path, evidence_dir: Path):
         pr = parse_price(nz(r.PROGRM_PRC), nz(r.PROGRM_PRC_TY_NM), nz(r.PROGRM_BEGIN_DE), end, shifted)
         tg = parse_target(nz(r.PROGRM_TRGET_NM))
         cats, src = classify(nz(r.PROGRM_NM), nz(r.PROGRM_TY_NM))
+        if cats is None and nz(r.INDUTY_NM) in SINGLE_SPORT_FACILITY:
+            # 종목명이 없지만 단일 종목 시설(수영장 등)의 강좌 → 엔진에서 '확인 필요'로만 취급
+            cats, src = [SINGLE_SPORT_FACILITY[nz(r.INDUTY_NM)]], "facility"
         basis_cnt[pr["basis"]] += 1
         cat_src[src or "none"] += 1
         for k, v in (("weekday", wd), ("time", tm), ("price", pr["perMonth"]), ("target", tg), ("category", cats)):
