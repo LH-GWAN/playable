@@ -1,9 +1,9 @@
-import { COND_ORDER, fmtYmd, type Evaluation } from '../engine/engine'
+import { COND_ORDER, fmtYmd, isMultiTier, type Evaluation } from '../engine/engine'
 import { COND_LABEL, PRICE_BASIS_LABEL, WEEKDAY_LABEL, won } from '../engine/labels'
 import type { Program } from '../types'
 
 export function priceText(p: Program): string {
-  if (p.pm !== null) return `월 ${won(p.pm)}`
+  if (p.pm !== null) return isMultiTier(p) ? `월 ${won(p.pm)}부터(대상별 요금 다를 수 있음)` : `월 ${won(p.pm)}`
   if (p.p === null) return '가격 정보 없음'
   if (p.p === 0) return '0원 표기(확인 필요)'
   return `${won(p.p)} · ${PRICE_BASIS_LABEL[p.pb]}`

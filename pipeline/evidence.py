@@ -6,6 +6,7 @@
 import csv
 import json
 import random
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,6 +24,9 @@ def accuracy_sample():
     pool = [p for p in programs if p["st"] == "cur"]
     sample = random.Random(SEED).sample(pool, 20)
     path = OUT / "accuracy_check.csv"
+    if path.exists() and "--force" not in sys.argv:
+        print(f"[skip] {path.relative_to(ROOT)} 이미 있음(점검 결과 보호). 새로 만들려면 --force")
+        return
     with path.open("w", encoding="utf-8-sig", newline="") as fh:
         w = csv.writer(fh)
         w.writerow([

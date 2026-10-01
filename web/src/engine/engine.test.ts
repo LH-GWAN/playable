@@ -70,6 +70,15 @@ describe('조건별 3상 판정', () => {
     expect(evaluate(p, ctx, q({ budget: 69999 })).conds.budget?.status).toBe('fail')
   })
 
+  it('대상이 여러 연령대인 강좌의 가격은 예산 안이어도 확인 필요, 넘으면 맞지 않음', () => {
+    const p = prog(0, 0, { tg: ['teen', 'adult'], pm: 34600 })
+    const ok = evaluate(p, ctx, q({ budget: 40000 }))
+    expect(ok.conds.budget?.status).toBe('unknown')
+    expect(ok.overall).toBe('check')
+    expect(evaluate(p, ctx, q({ budget: 30000 })).conds.budget?.status).toBe('fail')
+    expect(evaluate(prog(1, 0, { tg: ['adult'], pm: 34600 }), ctx, q({ budget: 40000 })).conds.budget?.status).toBe('pass')
+  })
+
   it('다음 회차 미확인 강좌는 조건을 모두 통과해도 확인 필요', () => {
     const e = evaluate(prog(0, 0, { st: 'next', e: '20260930' }), ctx, q({ category: 'swim' }))
     expect(e.overall).toBe('check')
@@ -132,6 +141,18 @@ describe('막는 조건과 최소 변경 대안', () => {
     expect(best.query.budget).toBe(60000)
   })
 
+  it('같은 조건 안에서는 더 작은 변경(요일 1개 추가)이 먼저 나온다', () => {
+    const ps = [
+      prog(0, 0, { wd: ['mon', 'tue', 'wed', 'thu', 'fri'] }),
+      prog(1, 0, { wd: ['mon', 'tue', 'wed', 'thu', 'fri'] }),
+      prog(2, 0, { wd: ['sat', 'sun'] }),
+    ]
+    const c = makeCtx(ps, facilities, meta)
+    const query = q({ regions: ['A'], weekdays: ['sat'] })
+    const alt = alternatives(c, query, search(c, query))
+    expect(alt.options[0].query.weekdays).toEqual(['sat', 'sun'])
+  })
+
   it('다른 조건이 확인 필요뿐인 후보만 있어도 예산 대안을 만든다', () => {
     const ps = [prog(0, 0, { pm: 80000, tb: null, tm: null })]
     const c = makeCtx(ps, facilities, meta)
@@ -140,6 +161,13 @@ describe('막는 조건과 최소 변경 대안', () => {
     expect(alt.level).toBe(1)
     expect(alt.options[0].query.budget).toBe(80000)
     expect(alt.options[0].check).toBe(1)
+  })
+
+  it('멀리 떨어진 지역(25km 초과)은 인근 지역 대안으로 내지 않는다', () => {
+    const ps = [prog(0, 2, { wd: ['tue'] })] // C구: A구에서 약 33km
+    const c = makeCtx(ps, facilities, meta)
+    const query = q({ regions: ['A'], weekdays: ['tue'] })
+    expect(alternatives(c, query, search(c, query)).level).toBe(0)
   })
 
   it('바꿀 수 있는 조건이 없으면 대안 없음(level 0)', () => {

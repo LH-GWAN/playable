@@ -85,6 +85,13 @@ const PRICE_UNKNOWN: Record<string, (p: Program) => string> = {
   missing: () => '가격 정보 없음',
 }
 
+/** 대상이 둘 이상의 연령대에 걸친 강좌 — 원본의 단일 가격이 대상별 요금 중 낮은 쪽일 수 있다 */
+export function isMultiTier(p: Program): boolean {
+  return p.tg !== null && p.tg.length > 1
+}
+
+export const MULTI_TIER_REASON = '대상이 여러 연령대라 표시 가격이 청소년·감면 요금일 수 있음 — 성인 요금 확인 필요'
+
 export function evalCond(k: CondKey, p: Program, f: Facility, q: Query): CondResult {
   switch (k) {
     case 'region':
@@ -117,7 +124,11 @@ export function evalCond(k: CondKey, p: Program, f: Facility, q: Query): CondRes
       return { status: q.times.includes(p.tb) ? 'pass' : 'fail' }
     case 'budget':
       if (p.pm === null) return { status: 'unknown', reason: (PRICE_UNKNOWN[p.pb] ?? PRICE_UNKNOWN.missing)(p) }
-      return { status: p.pm <= (q.budget as number) ? 'pass' : 'fail' }
+      if (p.pm > (q.budget as number)) return { status: 'fail' }
+      // 정확도 점검(20건)에서 대상이 여러 연령대인 강좌 9건 중 6건은 원본 가격이 청소년·감면 요금이었고
+      // 성인 요금은 더 높았다 → 예산 안이어도 '맞음'으로 확정하지 않는다.
+      if (isMultiTier(p)) return { status: 'unknown', reason: MULTI_TIER_REASON }
+      return { status: 'pass' }
     case 'transit':
       if (!f.tr) return { status: 'unknown', reason: '가까운 역·정류장 정보 없음' }
       return { status: f.tr.min <= (q.walkMax as number) ? 'pass' : 'fail' }
@@ -241,6 +252,9 @@ export interface Alternatives {
   options: Alternative[]
 }
 
+/** 인근 지역 대안은 시설 중심 간 이 거리 안에서만 제안한다 */
+export const MAX_REGION_KM = 25
+
 type Proposal = { change: Change; apply: (q: Query) => Query; sortKey: number }
 
 function distKm(ctx: Ctx, from: string[], to: string): number | null {
@@ -279,6 +293,7 @@ function propose(key: CondKey, cands: Evaluation[], q: Query, ctx: Ctx, limit: n
       const groups = groupBy(cands, (e) => e.f.sgc)
       return [...groups.keys()]
         .map((code) => ({ code, km: distKm(ctx, q.regions, code) ?? Number.MAX_SAFE_INTEGER }))
+        .filter(({ km }) => km <= MAX_REGION_KM)
         .sort((a, b) => a.km - b.km)
         .slice(0, limit)
         .map(({ code, km }) => {
@@ -387,8 +402,19 @@ export function alternatives(ctx: Ctx, q: Query, r: SearchResult): Alternatives 
     }
   }
   if (singles.length) {
-    singles.sort((x, y) => y.match - x.match || y.check - x.check)
-    return { level: 1, options: singles.slice(0, 8) }
+    // 조건 종류별로 묶어 각 종류 안에서는 '작은 변경'이 먼저 오게 두고(생성 순서),
+    // 종류끼리는 확인된 강좌가 가장 많이 생기는 종류부터 보여 준다.
+    const best = new Map<CondKey, number>()
+    for (const o of singles) {
+      const k = o.changes[0].key
+      best.set(k, Math.max(best.get(k) ?? 0, o.match * 1e6 + o.check))
+    }
+    const order = [...best.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => k)
+    const perKey = order.map((k) => singles.filter((o) => o.changes[0].key === k).slice(0, 3))
+    const out: Alternative[] = []
+    for (let i = 0; out.length < 8 && perKey.some((g) => g[i]); i++)
+      for (const g of perKey) if (g[i] && out.length < 8) out.push(g[i])
+    return { level: 1, options: out }
   }
 
   // 2단계: 1개로 안 될 때만 두 조건 조합
