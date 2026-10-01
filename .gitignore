@@ -6,3 +6,5 @@ dist/
 __pycache__/
 .pytest_cache/
 .DS_Store
+# 단, 직접 만든 증빙 표는 커밋한다
+!docs/evidence/*.csv

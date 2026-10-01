@@ -79,9 +79,10 @@ def nz(v):
 def fnum(v):
     v = nz(v)
     try:
-        return float(v) if v is not None else None
+        x = float(v) if v is not None else None
     except ValueError:
         return None
+    return None if x is None or math.isnan(x) else x
 
 
 def haversine_km(lat1, lon1, lat2, lon2):
@@ -146,7 +147,7 @@ def match_d2(fac: pd.DataFrame, d2: pd.DataFrame) -> dict[int, dict]:
         nn = norm_facility_name(f.FCLTY_NM)
         sg = str(f.SIGNGU_NM or "").replace(" ", "")
         idx, how = by_key.get((nn, sg)), "name"
-        if idx is None and f.lat is not None and f.lng is not None:
+        if idx is None and fnum(f.lat) is not None and fnum(f.lng) is not None:
             dist = haversine_km(f.lat, f.lng, has_xy.lat.values, has_xy.lng.values)
             near = has_xy[dist <= 0.15]
             best, best_score = None, 0.0
@@ -306,8 +307,8 @@ def build(raw_dir: Path, ref: date, out_dir: Path, evidence_dir: Path):
             "telSrc": tel_src if tel else None,
             "url": url,
             "urlSrc": url_src if url else None,
-            "lat": f.lat,
-            "lng": f.lng,
+            "lat": fnum(f.lat),
+            "lng": fnum(f.lng),
             "tr": nearest_transit(f),
             "d2": ({"how": m["how"], "name": m["name"], "owner": m["owner"], "dept": m["dept"], "state": state_note}
                    if m else None),
@@ -369,7 +370,7 @@ def build(raw_dir: Path, ref: date, out_dir: Path, evidence_dir: Path):
     }
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    dump = lambda obj, name: (out_dir / name).write_text(json.dumps(obj, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    dump = lambda obj, name: (out_dir / name).write_text(json.dumps(obj, ensure_ascii=False, separators=(",", ":"), allow_nan=False), encoding="utf-8")
     dump(programs, "programs.json")
     dump(facilities, "facilities.json")
     dump(meta, "meta.json")

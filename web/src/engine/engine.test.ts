@@ -132,6 +132,16 @@ describe('막는 조건과 최소 변경 대안', () => {
     expect(best.query.budget).toBe(60000)
   })
 
+  it('다른 조건이 확인 필요뿐인 후보만 있어도 예산 대안을 만든다', () => {
+    const ps = [prog(0, 0, { pm: 80000, tb: null, tm: null })]
+    const c = makeCtx(ps, facilities, meta)
+    const query = q({ regions: ['A'], times: ['evening'], budget: 50000 })
+    const alt = alternatives(c, query, search(c, query))
+    expect(alt.level).toBe(1)
+    expect(alt.options[0].query.budget).toBe(80000)
+    expect(alt.options[0].check).toBe(1)
+  })
+
   it('바꿀 수 있는 조건이 없으면 대안 없음(level 0)', () => {
     const none = { ...base, flexible: [] }
     const r = search(ctx, none)

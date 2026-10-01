@@ -1,7 +1,7 @@
 // 판정 엔진: 조건별 3상 판정 → 강좌 분류 → 막는 조건 분석 → 최소 변경 대안.
 // 순수 함수만 둔다(UI와 분리, Vitest로 검증).
 import type { Facility, Meta, Program, Sigungu, TargetGroup, TimeBucket, Weekday } from '../types'
-import { CATEGORY_LABEL, TIME_LABEL, WEEKDAY_LABEL, won } from './labels'
+import { CATEGORY_LABEL, TIME_LABEL, WEEKDAY_LABEL, won } from './labels.ts'
 
 export type CondKey = 'region' | 'category' | 'target' | 'weekday' | 'time' | 'budget' | 'transit'
 export type Status = 'pass' | 'unknown' | 'fail'
@@ -272,6 +272,7 @@ function groupBy<T>(xs: T[], key: (x: T) => string): Map<string, T[]> {
 
 /** 후보 강좌들(해당 조건에서만 막힌 강좌)에서 그 조건의 구체적 최소 변경안을 만든다 */
 function propose(key: CondKey, cands: Evaluation[], q: Query, ctx: Ctx, limit: number): Proposal[] {
+  if (!cands.length) return []
   switch (key) {
     case 'region': {
       if (!q.regions.length) return []
@@ -372,13 +373,23 @@ export function alternatives(ctx: Ctx, q: Query, r: SearchResult): Alternatives 
       return fs.length === 1 && fs[0] === k
     })
     if (!cands.length) continue
-    for (const pr of propose(k, cands, q, ctx, 3)) {
+    // 다른 조건이 모두 '맞음'인 후보로 만든 안(확인된 강좌가 생기는 최소 변경)을 먼저, 이어서 전체 후보 기준 안
+    const confirmed = cands.filter(
+      (e) => !e.cautions.length && r.conds.every((x) => x === k || e.conds[x]?.status === 'pass'),
+    )
+    const seen = new Set<string>()
+    for (const pr of [...propose(k, confirmed, q, ctx, 2), ...propose(k, cands, q, ctx, 3)]) {
+      if (seen.has(pr.change.label)) continue
+      seen.add(pr.change.label)
       const nq = pr.apply(q)
       const c = countOnly(ctx, nq)
       if (c.match + c.check > 0) singles.push({ changes: [pr.change], query: nq, ...c })
     }
   }
-  if (singles.length) return { level: 1, options: singles }
+  if (singles.length) {
+    singles.sort((x, y) => y.match - x.match || y.check - x.check)
+    return { level: 1, options: singles.slice(0, 8) }
+  }
 
   // 2단계: 1개로 안 될 때만 두 조건 조합
   const pairs: Alternative[] = []
